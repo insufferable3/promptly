@@ -3380,6 +3380,14 @@ if STATIC_DIR.exists():
             return FileResponse(requested_path)
         return FileResponse(index_path)
 
+    @app.get("/", include_in_schema=False)
+    def serve_frontend_root():
+        return FileResponse(STATIC_DIR / "index.html")
+
+    @app.head("/", include_in_schema=False)
+    def serve_frontend_root_head():
+        return FileResponse(STATIC_DIR / "index.html")
+
     @app.get("/{full_path:path}", include_in_schema=False)
     def serve_frontend(full_path: str):
         return frontend_file_response(full_path)

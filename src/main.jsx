@@ -16,7 +16,6 @@ import {
   getCalendarEvents,
   getCalendarStatus,
   deleteGoogleCalendarEvent,
-  getDesktopWidgetStatus,
   getInitialDashboard,
   hasBackendSession,
   requestDesktopWidgetUnhide,
@@ -297,6 +296,7 @@ function MiniMode({ urgentCount, nextEvent, onExpand }) {
   const handlePointerDown = (event) => {
     if (event.button !== 0) return;
     event.preventDefault();
+    const isDesktopApp = Boolean(window.promptlyDesktop);
     const origin = {
       x: event.screenX,
       y: event.screenY,
@@ -310,7 +310,7 @@ function MiniMode({ urgentCount, nextEvent, onExpand }) {
       const totalX = moveEvent.screenX - origin.x;
       const totalY = moveEvent.screenY - origin.y;
       if (Math.abs(totalX) + Math.abs(totalY) > 3) origin.moved = true;
-      if (deltaX || deltaY) {
+      if (isDesktopApp && (deltaX || deltaY)) {
         window.promptlyDesktop?.moveBy?.(deltaX, deltaY);
         origin.lastX = moveEvent.screenX;
         origin.lastY = moveEvent.screenY;
@@ -327,7 +327,7 @@ function MiniMode({ urgentCount, nextEvent, onExpand }) {
 
   return (
     <div
-      className="relative grid h-screen w-screen place-items-center rounded-full border border-white/20 bg-slate-950/55 text-white shadow-[0_10px_28px_rgba(8,145,178,0.24)] backdrop-blur-xl"
+      className="relative grid h-full w-full place-items-center rounded-full border border-white/20 bg-slate-950/55 text-white shadow-[0_10px_28px_rgba(8,145,178,0.24)] backdrop-blur-xl"
       title={nextEvent ? `Promptly: ${nextEvent}` : 'Drag Promptly'}
     >
       <motion.button
@@ -2669,7 +2669,7 @@ function ExpandedMode({ dashboard, tasks, setTasks, canUndo, canRedo, onUndo, on
 
   return (
     <motion.section
-      className="h-screen w-screen overflow-hidden rounded-[32px] border border-white/15 bg-[#07111f]/86 text-white shadow-[0_30px_100px_rgba(2,6,23,0.58)] backdrop-blur-2xl"
+      className="h-full w-full overflow-hidden rounded-[32px] border border-white/15 bg-[#07111f]/86 text-white shadow-[0_30px_100px_rgba(2,6,23,0.58)] backdrop-blur-2xl"
       initial={{ opacity: 0, scale: 0.92 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.94 }}
@@ -3077,7 +3077,7 @@ function ExpandedMode({ dashboard, tasks, setTasks, canUndo, canRedo, onUndo, on
   );
 }
 
-function PromptlyDesktopApp() {
+function PromptlyWidgetApp({ onHiddenChange, onModeChange }) {
   const isDesktopApp = Boolean(window.promptlyDesktop);
   const [mode, setMode] = useState('mini');
   const [dashboard] = useState(getInitialDashboard);
@@ -3102,7 +3102,9 @@ function PromptlyDesktopApp() {
     window.localStorage.removeItem('promptly-widget-hidden');
     document.documentElement.classList.remove('promptly-hidden');
     setWidgetHidden(false);
+    onHiddenChange?.(false);
     setMode(nextMode);
+    onModeChange?.(nextMode);
   };
 
   const setTasks = (updater) => {
@@ -3230,21 +3232,6 @@ function PromptlyDesktopApp() {
   }, [agentStatus]);
 
   useEffect(() => {
-    if (isDesktopApp) return undefined;
-    let cancelled = false;
-    const syncDesktopWidgetStatus = async () => {
-      const status = await getDesktopWidgetStatus();
-      if (!cancelled) setWidgetHidden(Boolean(status.hidden));
-    };
-    syncDesktopWidgetStatus();
-    const timer = window.setInterval(syncDesktopWidgetStatus, 1000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [isDesktopApp]);
-
-  useEffect(() => {
     window.localStorage.setItem('promptly-tasks', JSON.stringify(dedupeTasksByTitle(tasks)));
   }, [tasks]);
 
@@ -3262,6 +3249,7 @@ function PromptlyDesktopApp() {
 
   const setDesktopMode = (nextMode) => {
     setMode(nextMode);
+    onModeChange?.(nextMode);
     window.promptlyDesktop?.setMode?.(nextMode);
   };
 
@@ -3286,6 +3274,7 @@ function PromptlyDesktopApp() {
   const hideWidget = async () => {
     window.localStorage.setItem('promptly-widget-hidden', 'true');
     setWidgetHidden(true);
+    onHiddenChange?.(true);
     await setDesktopWidgetHidden(true);
     if (window.promptlyDesktop?.hide) {
       await window.promptlyDesktop.hide();
@@ -3295,8 +3284,8 @@ function PromptlyDesktopApp() {
 
   const unhideWidget = async () => {
     await requestDesktopWidgetUnhide();
-    revealWidget('expanded');
-    window.promptlyDesktop?.setMode?.('expanded');
+    revealWidget('mini');
+    window.promptlyDesktop?.setMode?.('mini');
   };
 
   useEffect(() => {
@@ -3314,26 +3303,10 @@ function PromptlyDesktopApp() {
     return null;
   }
 
-  if (widgetHidden) {
-    return (
-      <main className="min-h-screen w-screen bg-[#07111f] px-4 py-3 text-white">
-        <div className="flex justify-center">
-          <button
-            type="button"
-            onClick={unhideWidget}
-            className="rounded-full bg-cyan-300 px-4 py-2 text-sm font-black text-slate-950 shadow-lg shadow-cyan-950/30 hover:bg-cyan-200"
-            aria-label="Unhide desktop widget"
-            title="Unhide desktop widget"
-          >
-            Unhide
-          </button>
-        </div>
-      </main>
-    );
-  }
+  if (widgetHidden) return null;
 
   return (
-    <main className="h-screen w-screen overflow-hidden bg-transparent">
+    <main className="h-full w-full overflow-hidden bg-transparent">
       <AnimatePresence mode="wait">
         {mode === 'mini' ? (
           <MiniMode
@@ -3375,4 +3348,134 @@ function PromptlyDesktopApp() {
   );
 }
 
-createRoot(document.getElementById('root')).render(<PromptlyDesktopApp />);
+function WebDashboard({ widgetHidden, onShowWidget }) {
+  return (
+    <main className="min-h-screen bg-slate-50 text-slate-950">
+      <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/88 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-4">
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-[0.24em] text-cyan-700">Promptly</p>
+            <h1 className="text-xl font-black">AI productivity dashboard</h1>
+          </div>
+          {widgetHidden ? (
+            <button
+              type="button"
+              onClick={onShowWidget}
+              className="rounded-full bg-slate-950 px-4 py-2 text-sm font-black text-white shadow-lg shadow-slate-300/70 transition hover:bg-slate-800"
+            >
+              Show Promptly Widget
+            </button>
+          ) : null}
+        </div>
+      </header>
+
+      <section className="mx-auto grid max-w-6xl gap-6 px-5 py-8 lg:grid-cols-[1.05fr_0.95fr]">
+        <div className="rounded-[8px] border border-slate-200 bg-white p-6 shadow-sm">
+          <p className="text-sm font-bold text-cyan-700">Welcome back</p>
+          <h2 className="mt-2 text-3xl font-black tracking-normal text-slate-950">Plan today with Promptly beside you.</h2>
+          <p className="mt-3 max-w-2xl text-base leading-7 text-slate-600">
+            Use the floating widget to capture tasks, create reminders, schedule focus blocks, and connect Google Calendar without leaving this dashboard.
+          </p>
+          <div className="mt-6 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-[8px] border border-slate-200 bg-slate-50 p-4">
+              <p className="text-2xl font-black text-slate-950">Tasks</p>
+              <p className="mt-1 text-sm leading-5 text-slate-600">Capture and prioritize work by category.</p>
+            </div>
+            <div className="rounded-[8px] border border-slate-200 bg-slate-50 p-4">
+              <p className="text-2xl font-black text-slate-950">Calendar</p>
+              <p className="mt-1 text-sm leading-5 text-slate-600">Sync events and turn tasks into time blocks.</p>
+            </div>
+            <div className="rounded-[8px] border border-slate-200 bg-slate-50 p-4">
+              <p className="text-2xl font-black text-slate-950">Focus</p>
+              <p className="mt-1 text-sm leading-5 text-slate-600">Start sessions and track habits for the day.</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-4">
+          <section className="rounded-[8px] border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-black">Today&apos;s command center</h2>
+              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-800">Live</span>
+            </div>
+            <div className="mt-4 space-y-3">
+              {['Ask Promptly to add a task', 'Connect Google Calendar', 'Review reminders and focus sessions'].map((item) => (
+                <div key={item} className="flex items-center justify-between rounded-[8px] border border-slate-200 bg-slate-50 px-4 py-3">
+                  <span className="text-sm font-bold text-slate-700">{item}</span>
+                  <span className="h-2.5 w-2.5 rounded-full bg-cyan-500" />
+                </div>
+              ))}
+            </div>
+          </section>
+          <section className="rounded-[8px] border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-lg font-black">Widget status</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              {widgetHidden
+                ? 'The floating widget is hidden for this browser.'
+                : 'The floating Promptly widget is ready in the bottom-right corner.'}
+            </p>
+          </section>
+        </div>
+      </section>
+
+      {widgetHidden ? (
+        <button
+          type="button"
+          onClick={onShowWidget}
+          className="fixed bottom-6 right-6 z-[9999] rounded-full bg-slate-950 px-4 py-3 text-sm font-black text-white shadow-2xl shadow-slate-400/60 transition hover:bg-slate-800"
+        >
+          Show Promptly Widget
+        </button>
+      ) : null}
+    </main>
+  );
+}
+
+function PromptlyWebApp() {
+  const [widgetHidden, setWidgetHidden] = useState(
+    () => window.localStorage.getItem('promptly-widget-hidden') === 'true',
+  );
+  const [widgetMode, setWidgetMode] = useState('mini');
+
+  const showWidget = async () => {
+    window.localStorage.removeItem('promptly-widget-hidden');
+    await requestDesktopWidgetUnhide();
+    setWidgetMode('mini');
+    setWidgetHidden(false);
+  };
+
+  return (
+    <>
+      <WebDashboard widgetHidden={widgetHidden} onShowWidget={showWidget} />
+      {!widgetHidden ? (
+        <div
+          className="fixed bottom-6 right-6 z-[9999] h-16 w-16 data-[mode=expanded]:h-[min(80vh,720px)] data-[mode=expanded]:w-[min(420px,calc(100vw-48px))]"
+          data-mode={widgetMode}
+        >
+          <PromptlyWidgetApp onHiddenChange={setWidgetHidden} onModeChange={setWidgetMode} />
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function PromptlyApp() {
+  const isDesktopApp = Boolean(window.promptlyDesktop);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('promptly-desktop-runtime', isDesktopApp);
+    return () => document.documentElement.classList.remove('promptly-desktop-runtime');
+  }, [isDesktopApp]);
+
+  if (isDesktopApp) {
+    return (
+      <div className="h-screen w-screen">
+        <PromptlyWidgetApp />
+      </div>
+    );
+  }
+
+  return <PromptlyWebApp />;
+}
+
+createRoot(document.getElementById('root')).render(<PromptlyApp />);
