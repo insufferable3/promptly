@@ -14,6 +14,9 @@
   "build": {
     "appId": "com.promptly.desktop",
     "productName": "Promptly",
+    "directories": {
+      "output": "release"
+    },
     "files": [
       "dist/**/*",
       "electron/**/*",
