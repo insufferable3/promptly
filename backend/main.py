@@ -1857,7 +1857,13 @@ def google_login_url(request: Request, db: Session = Depends(get_db)):
 def google_calendar_callback(request: Request, db: Session = Depends(get_db)):
     state = request.query_params.get("state")
     frontend_url = OAUTH_FRONTEND_REDIRECTS.pop(state, FRONTEND_REDIRECT_URL) if state else FRONTEND_REDIRECT_URL
-    oauth_state = db.get(OAuthState, state) if state else None
+    oauth_state = None
+    if state:
+        try:
+            oauth_state = db.get(OAuthState, state)
+        except Exception:
+            logger.exception("Could not load Google OAuth state")
+            oauth_state = None
     if not oauth_state or is_expired(oauth_state.expires_at):
         if oauth_state:
             db.delete(oauth_state)
@@ -1946,6 +1952,16 @@ def google_calendar_callback(request: Request, db: Session = Depends(get_db)):
                 f"Check Google Cloud redirect URI: {GOOGLE_REDIRECT_URI}"
             ),
         }, frontend_url))
+
+
+@app.get("/google/callback")
+def google_callback_alias(request: Request, db: Session = Depends(get_db)):
+    return google_calendar_callback(request, db)
+
+
+@app.get("/debug/routes")
+def debug_routes():
+    return sorted([getattr(route, "path", "") for route in app.routes])
 
 
 @app.post("/auth/logout", status_code=204)
