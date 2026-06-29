@@ -1854,6 +1854,7 @@ def google_login_url(request: Request, db: Session = Depends(get_db)):
 
 
 @app.get("/auth/google/callback")
+@app.get("/auth/google/callback/")
 def google_calendar_callback(request: Request, db: Session = Depends(get_db)):
     state = request.query_params.get("state")
     frontend_url = OAUTH_FRONTEND_REDIRECTS.pop(state, FRONTEND_REDIRECT_URL) if state else FRONTEND_REDIRECT_URL
@@ -1955,6 +1956,7 @@ def google_calendar_callback(request: Request, db: Session = Depends(get_db)):
 
 
 @app.get("/google/callback")
+@app.get("/google/callback/")
 def google_callback_alias(request: Request, db: Session = Depends(get_db)):
     return google_calendar_callback(request, db)
 
