@@ -395,54 +395,6 @@ POST /webhooks/n8n
 
 ---
 
-## n8n Webhook
-
-Set this in your backend environment:
-
-```env
-N8N_WEBHOOK_SECRET=replace-with-a-long-random-value
-```
-
-Send planner output to:
-
-```txt
-POST /webhooks/n8n
-```
-
-Include the secret header:
-
-```txt
-X-N8N-Webhook-Secret: replace-with-a-long-random-value
-```
-
-Example payload:
-
-```json
-{
-  "user_id": 1,
-  "plan": {
-    "intent": "create_task",
-    "confidence": 0.95,
-    "task": {
-      "title": "Submit DBMS assignment",
-      "category": "study",
-      "priority": "high",
-      "deadline": "2026-06-26T20:00:00+05:30",
-      "estimated_minutes": 60
-    },
-    "calendar_event": {
-      "should_create": false,
-      "start_time": null,
-      "end_time": null
-    },
-    "needs_confirmation": false,
-    "reply": "Task created."
-  }
-}
-```
-
----
-
 ## Build Desktop Installers
 
 ```bash
